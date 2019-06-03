@@ -25,6 +25,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Backtrace the stack", mon_backtrace},
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -55,10 +56,68 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+// Lab1 only
+// read the pointer to the retaddr on the stack
+static uint32_t
+read_pretaddr() {
+    uint32_t pretaddr;
+    __asm __volatile("leal 4(%%ebp), %0" : "=r" (pretaddr)); 
+    return pretaddr;
+}
+
+void
+do_overflow(void)
+{
+    cprintf("Overflow success\n");
+}
+
+void
+start_overflow(void)
+{
+	// You should use a techique similar to buffer overflow
+	// to invoke the do_overflow function and
+	// the procedure must return normally.
+
+    // And you must use the "cprintf" function with %n specifier
+    // you augmented in the "Exercise 9" to do this job.
+
+    // hint: You can use the read_pretaddr function to retrieve 
+    //       the pointer to the function call return address;
+
+    char str[256] = {};
+    int nstr = 0;
+    char *pretAddr = (char *) read_pretaddr();
+    uint32_t overflowAddr = (uint32_t) do_overflow;
+    int i;
+	//确保正常返回
+    for (i = 0; i < 4; ++i)
+       cprintf("%*s%n\n", pretAddr[i] & 0xFF, "", pretAddr + 4 + i);
+    for (i = 0; i < 4; ++i)
+      cprintf("%*s%n\n", (overflowAddr >> (8*i)) & 0xFF, "", pretAddr + i);
+}
+
+void
+overflow_me(void)
+{
+        start_overflow();
+}
+
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	// Your code here.
+	overflow_me();
+    cprintf("Stack backtrace:\n");
+    uint32_t * address = (uint32_t *) read_ebp();
+    while (address != NULL) {
+      uint32_t eip = address[1];
+      cprintf("  eip %08x  ebp %08x  args %08x %08x %08x %08x %08x\n",
+          address[1], (uint32_t)address, address[2], address[3], address[4], address[5], address[6]);
+      struct Eipdebuginfo eipDebugInfo;
+      debuginfo_eip((uintptr_t)eip, &eipDebugInfo);
+      cprintf("         %s:%u %.*s+%u\n",	eipDebugInfo.eip_file, eipDebugInfo.eip_line, eipDebugInfo.eip_fn_namelen, eipDebugInfo.eip_fn_name, eip - (uint32_t)eipDebugInfo.eip_fn_addr);
+      address = (uint32_t *) (*address);
+    }
+    cprintf("Backtrace success\n");
 	return 0;
 }
 

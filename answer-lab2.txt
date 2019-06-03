@@ -1,0 +1,22 @@
+lab2主要是为了实现一个虚拟内存页机制
+首先在Part1中实现了内存页的管理，其中分别实现了boot_alloc, mem_init的一半，page_init,page_alloc
+以及page_free中在boot_alloc()函数中主要是通过已经有的提示，直接将nextfree赋值给result，并重新赋值
+nextfree来实现，主要是注意nextfree 的初始化以及对于n的分类讨论。
+在page_init()中主要根据注释的提示，将情况分为了4种情况，并且依次来初始化page的pp_ref和pp_link
+在page_alloc()中主要注意的是不需要在该函数中实现pp_ref的++操作而是在外部调用了该函数之后，自己来对pp_ref
+进行++操作。
+page_free()就是一个很简单的指针赋值罢了。
+其次在Part2中实现了虚拟地址，也即通过线性地址然后再加上两层的搜索找到物理地址的过程，因为很多的操作在lab中
+已经通过宏的形式给出，所以难度并不是很大。
+其中最为重要的是第一个需要实现的pgdir_walk()函数,具体实现如下：先通过PDX和PTX宏得到线性地址中对应的pde_index
+和pte_index，然后先通过pde_index和pgdir得到第二层page所在的物理地址，这里需要分类讨论一下，因为对应的页可能还没
+分配，如果没有分配的话就（通过PTE_P得知）通过调用page_alloc()来进行分配，并记得pp_ref++和将PTE_P PTE_U PTE_W置位
+这时第二层对应的页就已经分配好了。
+接下来的page_insert,page_lookup,page_remove等函数，其实都是先调用pgdir_wakl得到对应的pte_t，然后进行相应的操作即可
+在Part3中实现了内核地址空间的初始化，其实就是填了mem_init的剩下的一半，主要是根据注释以及在Part2中实现的
+boot_map_region()传入对应的参数即可实现
+在Challenge中选择了boot_map_region_large的实现，在这个实现中开启了PTE_PS(Page Size)位从而做一个更加空间效率高的映射
+也即一个页变成了4MB，而我们的走页表过程编程只有CR3->PD->PAGE
+首先实现boot_map_region_large(),实现过程和boot_map_region差不多，只不过每一次都是分配0x400000(4MB)的页，同时判断一
+个页是否被分配，也加上了PTE_PS这个FLAG的判断，写完以后替换原来在mem_init中的KERNBASE的boot_map_region,这时候跑grade
+会发现timeout，因为还没有开启PTE_PS模式，进入entry.S可以看到对应的注解，将CR4的PSE置位，再次执行grade，满分通过

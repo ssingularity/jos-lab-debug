@@ -7,6 +7,10 @@
 // It is one of the bits explicitly allocated to user processes (PTE_AVAIL).
 #define PTE_COW		0x800
 
+extern volatile pte_t uvpt[];     // VA of "virtual page table"
+extern volatile pde_t uvpd[];     // VA of current page directory
+extern void _pgfault_upcall(void);
+
 //
 // Custom page fault handler - if faulting page is copy-on-write,
 // map in our own private writable copy.
@@ -33,8 +37,15 @@ pgfault(struct UTrapframe *utf)
 	//   You should make three system calls.
 
 	// LAB 4: Your code here.
-
-	panic("pgfault not implemented");
+	addr = ROUNDDOWN(addr, PGSIZE);
+	if((FEC_WR & err) && (uvpt[(uintptr_t)addr / PGSIZE] & PTE_COW)){
+		sys_page_alloc(0, PFTEMP, PTE_P|PTE_U|PTE_W);
+		memmove(PFTEMP, addr, PGSIZE);
+		sys_page_map(0, PFTEMP, 0, addr, PTE_P|PTE_U|PTE_W);
+		sys_page_unmap(0, PFTEMP);
+	}else{
+		panic("page fault on not cow");
+	}
 }
 
 //
@@ -43,7 +54,7 @@ pgfault(struct UTrapframe *utf)
 // the new mapping must be created copy-on-write, and then our mapping must be
 // marked copy-on-write as well.  (Exercise: Why do we need to mark ours
 // copy-on-write again if it was already copy-on-write at the beginning of
-// this function?)
+// this function?)//因为如果已经是ｃｏｗ的话，说明父进程的父进程也共享同一副本，我们需要写一下这个副本，使得父进程
 //
 // Returns: 0 on success, < 0 on error.
 // It is also OK to panic on error.
@@ -52,9 +63,20 @@ static int
 duppage(envid_t envid, unsigned pn)
 {
 	int r;
-
-	// LAB 4: Your code here.
-	panic("duppage not implemented");
+	void* addr = (void*)(pn * PGSIZE);
+	if(pn == (UXSTACKTOP/PGSIZE - 1)){
+		sys_page_alloc(envid, (void*)(UXSTACKTOP - PGSIZE), PTE_P|PTE_W|PTE_U);
+	}
+	else if((uvpt[pn] & PTE_P) == 0 || (uvpt[pn] & PTE_U) == 0){
+		return 0;
+	}
+	else if (uvpt[pn] & (PTE_W | PTE_COW)){
+		sys_page_map(0, addr, envid, addr, PTE_U|PTE_P|PTE_COW);
+		sys_page_map(0, addr, 0, addr, PTE_U|PTE_P|PTE_COW);
+	}
+	else {
+		sys_page_map(0, addr, envid, addr, PTE_U|PTE_P);
+	}
 	return 0;
 }
 
@@ -78,7 +100,27 @@ envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
-	panic("fork not implemented");
+	set_pgfault_handler(pgfault);
+	envid_t envid = sys_exofork();
+	if (envid < 0) {
+		panic("sys_exofork: %e", envid);
+	}
+	if (envid == 0) {
+		// We're the child.
+		// The copied value of the global variable 'thisenv'
+		// is no longer valid (it refers to the parent!).
+		// Fix it and return 0.
+		thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+	for(int i = 0; i<UTOP/PGSIZE; i++){
+		if(uvpd[i/NPTENTRIES] & PTE_P){
+			duppage(envid, i);
+		}
+	}
+	sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
+	sys_env_set_status(envid, ENV_RUNNABLE);
+	return envid;
 }
 
 // Challenge!

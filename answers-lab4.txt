@@ -1,0 +1,14 @@
+Question1:
+1.它不需要使用A20
+2.它使用MPBOOTPHY来计算它的symbols的绝对物理地址，而不是通过linker来填充它们
+
+Question2：
+硬件的中断不会检查锁，而它会往内核栈上push东西上去，如果所有CPU公用一个Kernel Stack
+的话就会导致混乱
+
+Question3：
+因为切换的是用户态，然而e指向的是内核的位置，切换前后不会有什么影响
+
+Question4：
+如果不存储之前的environment的registers的话，在恢复environment的时候就会丢失
+该environment的信息，这会导致程序混乱，在切换environemnt的时候发生的
