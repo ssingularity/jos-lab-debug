@@ -16,7 +16,7 @@
 #include <kern/spinlock.h>
 
 struct Env *envs = NULL;		// All environments
-static struct Env *env_free_list = NULL;	// Free environment list
+static struct Env *env_free_list;	// Free environment list
 					// (linked by Env->env_link)
 
 #define ENVGENSHIFT	12		// >= LOGNENV
@@ -190,15 +190,16 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
-	e->env_pgdir = page2kva(p);
+	// env_pgdir存的的是虚拟地址，但是在换入CR3的时候会通过PA来转换成物理地址（简单得减去0xf000000)
+	e->env_pgdir = (pde_t*) page2kva(p);
 	p->pp_ref++;
+	memset(e->env_pgdir, 0, PGSIZE);
 	for(i = PDX(UTOP) ; i < NPDENTRIES ; i++ )
     	e->env_pgdir[i]=kern_pgdir[i];
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
-	cprintf("env_setup_vm env[%08x] %08x\n", e->env_id, e->env_pgdir);
 
 	return 0;
 }
@@ -262,7 +263,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
-	e->env_tf.tf_eflags |= FL_IF;
+	e->env_tf.tf_eflags = e->env_tf.tf_eflags | FL_IF
 
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
@@ -274,7 +275,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	env_free_list = e->env_link;
 	*newenv_store = e;
 
-	cprintf("[%08x] new env %08x pgdir %08x\n", curenv ? curenv->env_id : 0, e->env_id, e->env_pgdir);
+	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 	return 0;
 }
 
@@ -295,12 +296,6 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
-	uintptr_t start = (uintptr_t) ROUNDDOWN(va, PGSIZE);
-	uintptr_t end = (uintptr_t) ROUNDUP(va + len, PGSIZE);
-	for (uintptr_t i = start; i < end; i += PGSIZE){
-		struct PageInfo* pg = page_alloc(ALLOC_ZERO);
-		page_insert(e->env_pgdir, pg, (void *)i, PTE_W | PTE_U);
-	}
 }
 
 //
@@ -541,12 +536,12 @@ env_run(struct Env *e)
 	//	and make sure you have set the relevant parts of
 	//	e->env_tf to sensible values.
 	if (curenv == NULL || curenv != e){
-		if (curenv && curenv->env_status == ENV_RUNNING)
+		if (curenv != NULL && curenv->env_status == ENV_RUNNING)
 			curenv->env_status = ENV_RUNNABLE;
 		curenv = e;
-		e->env_status = ENV_RUNNING;
-		e->env_runs++;
-		lcr3(PADDR(e->env_pgdir));
+		curenv->env_status = ENV_RUNNING;
+		curenv->env_runs++;
+		lcr3(PADDR(curenv->env_pgdir));
 	}
 	env_pop_tf(&e->env_tf);
 	// LAB 3: Your code here.
