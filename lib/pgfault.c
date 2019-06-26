@@ -31,9 +31,11 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 		// LAB 4: Your code here.
 		envid_t envid = sys_getenvid();
 		sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_U|PTE_P|PTE_W);
+		// 这里把_pgfault_upcall的虚拟地址传给了env，所以env肯定会从pfentry中对应的_pgfault_upcall的位置处运行
 		sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
 	}
 
 	// Save handler pointer for assembly to call.
+	// 修改_pgfault_handler这一变量对应指向的虚拟内存，从而可以在既有框架下运行自定义的handler
 	_pgfault_handler = handler;
 }

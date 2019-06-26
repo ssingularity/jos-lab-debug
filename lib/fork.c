@@ -59,6 +59,7 @@ pgfault(struct UTrapframe *utf)
 // Returns: 0 on success, < 0 on error.
 // It is also OK to panic on error.
 //
+// 相当于为子进程重新构建pagetable
 static int
 duppage(envid_t envid, unsigned pn)
 {
@@ -118,7 +119,6 @@ fork(void)
 			duppage(envid, i);
 		}
 	}
-	sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
 	sys_env_set_status(envid, ENV_RUNNABLE);
 	return envid;
 }

@@ -22,6 +22,7 @@ umain(int argc, char **argv)
 	}
 }
 
+// 先将page allocate到dstenv中，然后将该page map到当前env的UTMP上，并使用memmove将对应内容写入到map了的对应内存页上面去，最后unmap即可
 void
 duppage(envid_t dstenv, void *addr)
 {
@@ -30,6 +31,7 @@ duppage(envid_t dstenv, void *addr)
 	// This is NOT what you should do in your fork.
 	if ((r = sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
+	// 建立当前env的UTMP和dstenv的addr之间的一个映射（通过建立pagetable从而共享同一个内存页)，从而从当前env写入内存相当于从dstenv的addr写入内存
 	if ((r = sys_page_map(dstenv, addr, 0, UTEMP, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_map: %e", r);
 	memmove(UTEMP, addr, PGSIZE);

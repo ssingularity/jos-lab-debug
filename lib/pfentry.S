@@ -66,10 +66,13 @@ _pgfault_upcall:
 	//
 	// LAB 4: Your code here.
 	addl $0x8, %esp
+	// eax是返回后eip的地址
 	movl 0x20(%esp), %eax
+	// ebx是trap时的esp
 	movl 0x28(%esp), %ebx   
 	subl $0x4, %ebx         
 	movl %ebx, 0x28(%esp)  
+	// 在原来的esp那里存返回的va地址
 	movl %eax, (%ebx)       
 
 	// Restore the trap-time registers.  After you do this, you
@@ -77,6 +80,7 @@ _pgfault_upcall:
 	// LAB 4: Your code here.
 
 	popal 
+	// 跳过eip
 	addl $0x4, %esp
 
 	// Restore eflags from the stack.  After you do this, you can
@@ -93,5 +97,6 @@ _pgfault_upcall:
 
 	// Return to re-execute the instruction that faulted.
 	// LAB 4: Your code here.
-
+//	CPU执行ret指令时，相当于进行：
+//      pop IP
 	ret

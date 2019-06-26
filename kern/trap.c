@@ -417,6 +417,7 @@ page_fault_handler(struct Trapframe *tf)
 		else 
 			trapframe = (struct UTrapframe * ) (UXSTACKTOP - sizeof(struct UTrapframe));
 		user_mem_assert(curenv, (void*)trapframe, sizeof(struct UTrapframe), PTE_W);
+		// 相当于在UXSTACK上push trapframe的相关信息
 		trapframe->utf_eflags   = tf->tf_eflags;
 		trapframe->utf_fault_va = fault_va;
 		trapframe->utf_err      = tf->tf_err;
@@ -424,6 +425,7 @@ page_fault_handler(struct Trapframe *tf)
 		trapframe->utf_eip      = tf->tf_eip;
 		trapframe->utf_esp      = tf->tf_esp;
 
+		// 将eip（也即命令指针）指向存在env中的env_pgfault_upcall
 		curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
 		curenv->env_tf.tf_esp = (uintptr_t)trapframe;
 		env_run(curenv);
